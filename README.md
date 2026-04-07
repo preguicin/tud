@@ -2,7 +2,7 @@
 
 The only diff is that i am making it in golang an some additionals
 
-# The language is TUD (Totally Unusable Definition)
+# The language is TUD (Totally Useless Definition)
 - Dynamic allocation
 - Garbage collected
 - High level
