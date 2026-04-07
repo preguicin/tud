@@ -3,14 +3,16 @@ package interpreter
 import (
 	"encoding/binary"
 	"unicode"
+	"unicode/utf8"
 )
 
 type Scanner struct {
 	interpreter *Interpreter
 	source      []byte
 	tokens      []Token
+	ch          rune //Current char being proccessed
 	start       int
-	current     int
+	nextpos     int //The next char position
 	line        int
 }
 
@@ -20,34 +22,44 @@ func NewScanner(i *Interpreter, data []byte) Scanner {
 		tokens:      make([]Token, 0),
 		source:      data,
 		start:       0,
-		current:     0,
+		nextpos:     0,
+		ch:          ' ',
 		line:        1,
 	}
 }
 
 func (s *Scanner) isAtEnd() bool {
-	return s.current >= len(s.source)
+	return s.nextpos >= len(s.source)
 }
 
-func (s *Scanner) next() uint8 {
-	val := s.source[s.current]
-	s.current++
-	return val
+// src: https://eli.thegreenplace.net/2022/a-faster-lexer-in-go/
+func (s *Scanner) next() {
+	if s.nextpos < len(s.source) {
+		r, w := rune(s.source[s.nextpos]), 1
+		if r >= utf8.RuneSelf {
+			r, w = utf8.DecodeRune(s.source[s.nextpos:])
+			if r == utf8.RuneError || r == 0 {
+				s.interpreter.ie = &InterpreterError{}
+				return
+			}
+		}
+		s.nextpos += w
+		s.ch = r
+	} else {
+		s.nextpos = len(s.source)
+		s.ch = -1 // EOF
+	}
 }
 
 func (s *Scanner) peek(idx int) uint8 {
-	if s.isAtEnd() {
-		return '\x00'
+	if s.nextpos+idx < len(s.source) {
+		return s.source[s.nextpos+idx]
 	}
-
-	if s.current+idx >= len(s.source) {
-		return '\x00'
-	}
-	return s.source[s.current+idx]
+	return '\x00'
 }
 
 func (s *Scanner) findErrorLine() (string, int) {
-	start := s.current
+	start := s.nextpos
 	data := s.source
 	if start >= len(data) {
 		start = len(data) - 1
@@ -56,13 +68,13 @@ func (s *Scanner) findErrorLine() (string, int) {
 		start--
 	}
 
-	end := s.current
+	end := s.nextpos
 	for end < len(data) && data[end] != '\n' {
 		end++
 	}
 
 	line_text := string(data[start:end])
-	col := (s.current - start) - 1
+	col := (s.nextpos - start) - 1
 
 	return line_text, col
 }
@@ -71,7 +83,7 @@ func (s *Scanner) match(char uint8) bool {
 	if s.isAtEnd() || s.peek(0) != char {
 		return false
 	}
-	s.current++
+	s.nextpos++
 	return true
 }
 
@@ -88,7 +100,7 @@ func (s *Scanner) multOpt(normal TokenType, other TokenType, comp uint8) {
 
 func (s *Scanner) skipWhiteSpace() {
 	for {
-		switch s.peek(0) {
+		switch s.ch {
 		case ' ', '\t', '\r':
 			s.next()
 		case '\n':
@@ -114,7 +126,7 @@ func (s *Scanner) skipComment() {
 }
 
 func (s *Scanner) addToken(tt TokenType, literal any) {
-	text := string(s.source[s.start:s.current])
+	text := string(s.source[s.start:s.nextpos])
 	s.tokens = append(s.tokens, Token{token_type: tt, lexeme: text, literal: literal, line: s.line})
 }
 
@@ -132,14 +144,14 @@ func (s *Scanner) scanString() {
 			Line:       s.line,
 			SourceLine: line_txt,
 			Col:        col,
-			Where:      s.source[s.current-1],
+			Where:      s.source[s.nextpos-1],
 			Message:    "Unterminated string.",
 		}
 		return
 	}
 	s.next()
 
-	value := string(s.source[s.start+1 : s.current-1])
+	value := string(s.source[s.start+1 : s.nextpos-1])
 	s.addToken(STRING, value)
 
 }
@@ -162,19 +174,22 @@ func (s *Scanner) scanNumber() {
 		}
 	}
 
-	data := s.source[s.start:s.current]
+	data := s.source[s.start:s.nextpos]
 	val := float64(binary.BigEndian.Uint64(data))
 	s.addToken(NUMBER, (val))
 }
 
 func (s *Scanner) scan() {
 begin:
+	s.next()
 	s.skipWhiteSpace()
-	char := s.next()
+	char := s.ch
+
 	if unicode.IsDigit(rune(char)) {
 		s.scanNumber()
 		return
 	}
+
 	switch char {
 	case '(':
 		s.addToken(LEFT_PAREN, nil)
@@ -219,7 +234,7 @@ begin:
 			Line:       s.line,
 			SourceLine: line_txt,
 			Col:        col,
-			Where:      s.source[s.current-1],
+			Where:      s.source[s.nextpos-1],
 			Message:    "Unterminated string.",
 		}
 	}
