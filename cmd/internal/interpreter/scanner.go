@@ -6,6 +6,8 @@ import (
 	"unicode/utf8"
 )
 
+const eof = -1
+
 type Scanner struct {
 	interpreter *Interpreter
 	source      []byte
@@ -47,7 +49,7 @@ func (s *Scanner) next() {
 		s.ch = r
 	} else {
 		s.nextpos = len(s.source)
-		s.ch = -1 // EOF
+		s.ch = eof
 	}
 }
 
@@ -125,6 +127,19 @@ func (s *Scanner) skipComment() {
 	}
 }
 
+func (s *Scanner) skipcComment() {
+	for {
+		ch := s.peek(0)
+		if ch == '*' && s.peek(1) == '/' {
+			s.next()
+			s.next()
+			break
+		} else if s.isAtEnd() {
+			break
+		}
+		s.next()
+	}
+}
 func (s *Scanner) addToken(tt TokenType, literal any) {
 	text := ""
 	s.tokens = append(s.tokens, Token{token_type: tt, lexeme: text, literal: literal, line: s.line})
@@ -198,7 +213,7 @@ begin:
 	s.next()
 	char := s.ch
 
-	if char == -1 /*EOF*/ {
+	if char == eof {
 		return
 	}
 
@@ -239,6 +254,9 @@ begin:
 	case '/':
 		if s.peek(0) == '/' {
 			s.skipComment()
+			goto begin
+		} else if s.peek(0) == '*' {
+			s.skipcComment()
 			goto begin
 		} else {
 			s.addToken(SLASH, nil)
