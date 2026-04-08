@@ -34,6 +34,7 @@ func main() {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Println("Starting TUD session...")
 
+		i := interpreter.NewInterpreter()
 		for {
 			fmt.Print("> ")
 			data, err := reader.ReadBytes('\n')
@@ -47,8 +48,7 @@ func main() {
 				break
 			}
 
-			// i := interpreter.NewInterpreter()
-			// i.ExecInteractive(data)
+			i.ExecInteractive(data)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -18,163 +19,43 @@ func scannedTokenTypes(tokens []Token) []TokenType {
 	return types
 }
 
-func TestSingleCharTokens(t *testing.T) {
-	cases := []struct {
-		src      string
-		expected TokenType
+func TestScanner(t *testing.T) {
+	tests := []struct {
+		name          string
+		src           string
+		expectedTypes []TokenType
+		expectError   bool
 	}{
-		{"(", LEFT_PAREN},
-		{")", RIGHT_PAREN},
-		{"{", LEFT_BRACE},
-		{"}", RIGHT_BRACE},
-		{",", COMMA},
-		{".", DOT},
-		{"-", MINUS},
-		{"+", PLUS},
-		{";", SEMICOLON},
-		{"*", STAR},
-		{"/", SLASH},
+		{"Single Chars", "(){},.-+;*/", []TokenType{LEFT_PAREN, RIGHT_PAREN, LEFT_BRACE, RIGHT_BRACE, COMMA, DOT, MINUS, PLUS, SEMICOLON, STAR, SLASH}, false},
+		{"Two Chars", "!= == <= >= < > !", []TokenType{BANG_EQUAL, EQUAL_EQUAL, LESS_EQUAL, GREATER_EQUAL, LESS, GREATER, BANG}, false},
+		{"Whitespace & Comments", "  \t \n // comment \n +", []TokenType{PLUS}, false},
+		{"String Literal", `"hello"`, []TokenType{STRING}, false},
+		{"Keywords", "var fn return if else", []TokenType{VAR, FN, RETURN, IF, ELSE}, false},
+		{"Keywords", "var dia = 1.0;", []TokenType{VAR, IDENTIFIER, EQUAL, NUMBER, SEMICOLON}, false},
+		{"Unterminated String", `"no end`, nil, true},
+		{"Invalid Char", "@", nil, true},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.src, func(t *testing.T) {
-			s, _ := newTestScanner(tc.src)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, i := newTestScanner(tt.src)
 			tokens := s.ScanTokens()
-			found := false
-			for _, tok := range tokens {
-				if tok.token_type == tc.expected {
-					found = true
-					break
+
+			if tt.expectError {
+				if i.ie == nil {
+					t.Errorf("expected error for %q, but got none", tt.src)
 				}
+				return
 			}
-			if !found {
-				t.Errorf("expected token %v for input %q, got %v", tc.expected, tc.src, scannedTokenTypes(tokens))
+
+			if i.ie != nil {
+				t.Fatalf("unexpected error for %q: %s", tt.src, i.ie.Message)
+			}
+
+			actualTypes := scannedTokenTypes(tokens)
+			if !reflect.DeepEqual(actualTypes, tt.expectedTypes) {
+				t.Errorf("mismatch for %q\nexpected: %v\ngot:      %v", tt.src, tt.expectedTypes, actualTypes)
 			}
 		})
-	}
-}
-
-func TestTwoCharTokens(t *testing.T) {
-	cases := []struct {
-		src      string
-		expected TokenType
-	}{
-		{"!=", BANG_EQUAL},
-		{"!", BANG},
-		{"==", EQUAL_EQUAL},
-		{"<=", LESS_EQUAL},
-		{"<", LESS},
-		{">=", GREATER_EQUAL},
-		{">", GREATER},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.src, func(t *testing.T) {
-			s, _ := newTestScanner(tc.src)
-			tokens := s.ScanTokens()
-			found := false
-			for _, tok := range tokens {
-				if tok.token_type == tc.expected {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("expected token %v for input %q, got %v", tc.expected, tc.src, scannedTokenTypes(tokens))
-			}
-		})
-	}
-}
-
-func TestCommentIsSkipped(t *testing.T) {
-	s, _ := newTestScanner("//t\n+")
-	tokens := s.ScanTokens()
-	for _, tok := range tokens {
-		if tok.token_type == SLASH {
-			t.Errorf("comment should have been skipped, got SLASH token")
-		}
-	}
-	found := false
-	for _, tok := range tokens {
-		if tok.token_type == PLUS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected PLUS after comment, got %v", scannedTokenTypes(tokens))
-	}
-}
-
-func TestWhitespaceIsSkipped(t *testing.T) {
-	s, _ := newTestScanner("   \t+")
-	tokens := s.ScanTokens()
-	found := false
-	for _, tok := range tokens {
-		if tok.token_type == PLUS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected PLUS after whitespace, got %v", scannedTokenTypes(tokens))
-	}
-}
-
-func TestNewlineIncrementsLine(t *testing.T) {
-	s, _ := newTestScanner("\n+")
-	tokens := s.ScanTokens()
-	for _, tok := range tokens {
-		if tok.token_type == PLUS && tok.line != 2 {
-			t.Errorf("expected PLUS on line 2, got line %d", tok.line)
-		}
-	}
-}
-
-func TestValidString(t *testing.T) {
-	s, i := newTestScanner(`"hello"`)
-	tokens := s.ScanTokens()
-	if i.ie != nil {
-		t.Fatalf("unexpected error: %s", i.ie.Message)
-	}
-	for _, tok := range tokens {
-		if tok.token_type == STRING {
-			if tok.literal != "hello" {
-				t.Errorf("expected literal 'hello', got %v", tok.literal)
-			}
-			return
-		}
-	}
-	t.Errorf("expected STRING token, got %v", scannedTokenTypes(tokens))
-}
-
-func TestUnterminatedString(t *testing.T) {
-	s, i := newTestScanner(`"hello`)
-	s.ScanTokens()
-	if i.ie == nil {
-		t.Error("expected an InterpreterError for unterminated string, got nil")
-	}
-}
-
-func TestUnknownCharacterSetsError(t *testing.T) {
-	s, i := newTestScanner("@")
-	s.ScanTokens()
-	if i.ie == nil {
-		t.Error("expected an InterpreterError for unknown character '@', got nil")
-	}
-}
-
-func TestMultipleTokenSequence(t *testing.T) {
-	s, _ := newTestScanner("(+)")
-	tokens := s.ScanTokens()
-	expected := []TokenType{LEFT_PAREN, PLUS, RIGHT_PAREN}
-	found := 0
-	for _, tok := range tokens {
-		for _, e := range expected {
-			if tok.token_type == e {
-				found++
-			}
-		}
-	}
-	if found != len(expected) {
-		t.Errorf("expected tokens %v, got %v", expected, scannedTokenTypes(tokens))
 	}
 }

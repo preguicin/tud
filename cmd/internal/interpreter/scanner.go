@@ -1,7 +1,7 @@
 package interpreter
 
 import (
-	"encoding/binary"
+	"strconv"
 	"unicode"
 	"unicode/utf8"
 )
@@ -100,7 +100,7 @@ func (s *Scanner) multOpt(normal TokenType, other TokenType, comp uint8) {
 
 func (s *Scanner) skipWhiteSpace() {
 	for {
-		switch s.ch {
+		switch s.peek(0) {
 		case ' ', '\t', '\r':
 			s.next()
 		case '\n':
@@ -126,7 +126,7 @@ func (s *Scanner) skipComment() {
 }
 
 func (s *Scanner) addToken(tt TokenType, literal any) {
-	text := string(s.source[s.start:s.nextpos])
+	text := ""
 	s.tokens = append(s.tokens, Token{token_type: tt, lexeme: text, literal: literal, line: s.line})
 }
 
@@ -139,14 +139,7 @@ func (s *Scanner) scanString() {
 		s.next()
 	}
 	if s.isAtEnd() {
-		line_txt, col := s.findErrorLine()
-		s.interpreter.ie = &InterpreterError{
-			Line:       s.line,
-			SourceLine: line_txt,
-			Col:        col,
-			Where:      s.source[s.nextpos-1],
-			Message:    "Unterminated string.",
-		}
+		s.createError("Unterminated string.")
 		return
 	}
 	s.next()
@@ -175,15 +168,39 @@ func (s *Scanner) scanNumber() {
 	}
 
 	data := s.source[s.start:s.nextpos]
-	val := float64(binary.BigEndian.Uint64(data))
+	// TODO: Make add toke use slice of bytes from origin and convert the numbers on the tokenizer
+	val, err := strconv.ParseFloat(string(data), 64)
+
+	if err != nil {
+		s.createError("Failed to convert number.")
+	}
+
 	s.addToken(NUMBER, (val))
+}
+
+func (s *Scanner) createError(message string) {
+	line_txt, col := s.findErrorLine()
+	data := s.source[s.start:(s.nextpos - 1)]
+	s.interpreter.ie = &InterpreterError{
+		Line:       s.line,
+		SourceLine: line_txt,
+		Col:        col,
+		Where:      string(data),
+		Message:    message,
+	}
 }
 
 func (s *Scanner) scan() {
 begin:
-	s.next()
 	s.skipWhiteSpace()
+	s.start = s.nextpos
+
+	s.next()
 	char := s.ch
+
+	if char == -1 /*EOF*/ {
+		return
+	}
 
 	if unicode.IsDigit(rune(char)) {
 		s.scanNumber()
@@ -229,15 +246,31 @@ begin:
 	case '"':
 		s.scanString()
 	default:
-		line_txt, col := s.findErrorLine()
-		s.interpreter.ie = &InterpreterError{
-			Line:       s.line,
-			SourceLine: line_txt,
-			Col:        col,
-			Where:      s.source[s.nextpos-1],
-			Message:    "Unterminated string.",
+		if unicode.IsLetter(s.ch) || unicode.IsNumber(s.ch) {
+			s.indetifier()
+		} else {
+			s.createError("Unsupported Type.")
 		}
 	}
+}
+
+func (s *Scanner) indetifier() {
+	for {
+		ch := rune(s.peek(0))
+		if unicode.IsLetter(ch) || unicode.IsNumber(ch) {
+			s.next()
+		} else {
+			break
+		}
+	}
+
+	text := string(s.source[s.start:s.nextpos])
+
+	tokenType, ok := keywords[text]
+	if !ok {
+		tokenType = IDENTIFIER
+	}
+	s.addToken(tokenType, nil)
 }
 
 func (s *Scanner) ScanTokens() []Token {
