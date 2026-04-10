@@ -1,13 +1,14 @@
-package interpreter
+package lexer
 
 import (
 	"reflect"
 	"testing"
+	"tud/cmd/internal/interpreter"
 )
 
-func newTestScanner(src string) (*Scanner, *Interpreter) {
+func newTestScanner(src string) (*Scanner, *interpreter.Interpreter) {
 	i := &Interpreter{}
-	s := NewScanner(i, []byte(src))
+	s := NewScanner([]byte(src))
 	return &s, i
 }
 

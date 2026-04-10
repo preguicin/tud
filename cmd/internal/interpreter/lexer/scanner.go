@@ -1,4 +1,4 @@
-package interpreter
+package lexer
 
 import (
 	"strconv"
@@ -9,24 +9,24 @@ import (
 const eof = -1
 
 type Scanner struct {
-	interpreter *Interpreter
-	source      []byte
-	tokens      []Token
-	ch          rune //Current char being proccessed
-	start       int
-	nextpos     int //The next char position
-	line        int
+	SendInterpreterError
+	source  []byte
+	tokens  []Token
+	ch      rune //Current char being proccessed
+	start   int
+	nextpos int //The next char position
+	line    int
 }
 
-func NewScanner(i *Interpreter, data []byte) Scanner {
+func NewScanner(data []byte, sie inter.SendInterpreterError) Scanner {
 	return Scanner{
-		interpreter: i,
-		tokens:      make([]Token, 0),
-		source:      data,
-		start:       0,
-		nextpos:     0,
-		ch:          ' ',
-		line:        1,
+		SendInterpreterError: sie,
+		tokens:               make([]Token, 0),
+		source:               data,
+		start:                0,
+		nextpos:              0,
+		ch:                   ' ',
+		line:                 1,
 	}
 }
 
@@ -41,7 +41,7 @@ func (s *Scanner) next() {
 		if r >= utf8.RuneSelf {
 			r, w = utf8.DecodeRune(s.source[s.nextpos:])
 			if r == utf8.RuneError || r == 0 {
-				s.interpreter.ie = &InterpreterError{}
+				s.createError("Invalid UTF-8 charachter")
 				return
 			}
 		}
@@ -61,7 +61,7 @@ func (s *Scanner) peek(idx int) uint8 {
 }
 
 func (s *Scanner) findErrorLine() (string, int) {
-	start := s.nextpos
+	start := s.start
 	data := s.source
 	if start >= len(data) {
 		start = len(data) - 1
@@ -196,13 +196,7 @@ func (s *Scanner) scanNumber() {
 func (s *Scanner) createError(message string) {
 	line_txt, col := s.findErrorLine()
 	data := s.source[s.start:(s.nextpos - 1)]
-	s.interpreter.ie = &InterpreterError{
-		Line:       s.line,
-		SourceLine: line_txt,
-		Col:        col,
-		Where:      string(data),
-		Message:    message,
-	}
+	s.SendInterpreterError(s.line, col, line_txt, string(data), message)
 }
 
 func (s *Scanner) scan() {
@@ -293,7 +287,7 @@ func (s *Scanner) indetifier() {
 
 func (s *Scanner) ScanTokens() []Token {
 	for {
-		if s.isAtEnd() || s.interpreter.ie != nil {
+		if s.isAtEnd() {
 			break
 		}
 		s.scan()

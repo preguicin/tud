@@ -1,4 +1,4 @@
-package interpreter
+package lexer
 
 type TokenType uint
 
