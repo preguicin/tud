@@ -3,13 +3,17 @@ package lexer
 import (
 	"reflect"
 	"testing"
-	"tud/cmd/internal/interpreter"
+	"tud/cmd/internal/file"
+	"tud/cmd/internal/interpreter/error"
 )
 
-func newTestScanner(src string) (*Scanner, *interpreter.Interpreter) {
-	i := &Interpreter{}
-	s := NewScanner([]byte(src))
-	return &s, i
+func newTestScanner(src string) (*Scanner, *error.Reporter) {
+	data := []byte(src)
+	f := file.NewInMemFile(data)
+	errReporter := error.NewErrorReporter(data)
+
+	s := NewScanner(f, errReporter.NewError)
+	return &s, &errReporter
 }
 
 func scannedTokenTypes(tokens []Token) []TokenType {
@@ -39,18 +43,21 @@ func TestScanner(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, i := newTestScanner(tt.src)
+			s, errRep := newTestScanner(tt.src)
 			tokens := s.ScanTokens()
 
 			if tt.expectError {
-				if i.ie == nil {
+				println(errRep.Errors[0].Message)
+				if len(errRep.Errors) == 0 {
 					t.Errorf("expected error for %q, but got none", tt.src)
 				}
 				return
 			}
 
-			if i.ie != nil {
-				t.Fatalf("unexpected error for %q: %s", tt.src, i.ie.Message)
+			if len(errRep.Errors) != 0 {
+				for _, err := range errRep.Errors {
+					t.Fatalf("unexpected error for %q: %s", tt.src, err.Message)
+				}
 			}
 
 			actualTypes := scannedTokenTypes(tokens)

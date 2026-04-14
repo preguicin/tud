@@ -2,90 +2,74 @@ package lexer
 
 import (
 	"strconv"
+	"tud/cmd/internal/file"
 	"unicode"
 	"unicode/utf8"
 )
 
 const eof = -1
 
+type ErrorHandler func(pos file.Position, msg string)
+
 type Scanner struct {
-	SendInterpreterError
-	source  []byte
-	tokens  []Token
-	ch      rune //Current char being proccessed
-	start   int
-	nextpos int //The next char position
-	line    int
+	file        file.File
+	source      []byte
+	tokens      []Token
+	ch          rune //Current char being proccessed
+	createError ErrorHandler
 }
 
-func NewScanner(data []byte, sie inter.SendInterpreterError) Scanner {
+func NewScanner(file file.File, err ErrorHandler) Scanner {
 	return Scanner{
-		SendInterpreterError: sie,
-		tokens:               make([]Token, 0),
-		source:               data,
-		start:                0,
-		nextpos:              0,
-		ch:                   ' ',
-		line:                 1,
+		file:        file,
+		createError: err,
+		tokens:      make([]Token, 0),
+		source:      file.GetBytes(),
+		ch:          ' ',
 	}
+}
+func (s *Scanner) pos() *file.Position {
+	return s.file.Pos()
 }
 
 func (s *Scanner) isAtEnd() bool {
-	return s.nextpos >= len(s.source)
+	return s.pos().Col >= len(s.source)
 }
 
 // src: https://eli.thegreenplace.net/2022/a-faster-lexer-in-go/
 func (s *Scanner) next() {
-	if s.nextpos < len(s.source) {
-		r, w := rune(s.source[s.nextpos]), 1
+	if s.pos().Col < len(s.source) {
+		r, w := rune(s.source[s.pos().Col]), 1
 		if r >= utf8.RuneSelf {
-			r, w = utf8.DecodeRune(s.source[s.nextpos:])
+			r, w = utf8.DecodeRune(s.source[s.pos().Col:])
 			if r == utf8.RuneError || r == 0 {
-				s.createError("Invalid UTF-8 charachter")
+				s.createError(*s.file.Pos(), "Invalid UTF-8 charachter")
 				return
 			}
 		}
-		s.nextpos += w
+		s.pos().Col += w
 		s.ch = r
 	} else {
-		s.nextpos = len(s.source)
+		s.pos().Col = len(s.source)
 		s.ch = eof
 	}
 }
 
 func (s *Scanner) peek(idx int) uint8 {
-	if s.nextpos+idx < len(s.source) {
-		return s.source[s.nextpos+idx]
+
+	nextChar := s.pos().Col + idx
+	if nextChar < len(s.source) {
+		return s.source[nextChar]
 	}
+
 	return '\x00'
-}
-
-func (s *Scanner) findErrorLine() (string, int) {
-	start := s.start
-	data := s.source
-	if start >= len(data) {
-		start = len(data) - 1
-	}
-	for start > 0 && data[start-1] != '\n' {
-		start--
-	}
-
-	end := s.nextpos
-	for end < len(data) && data[end] != '\n' {
-		end++
-	}
-
-	line_text := string(data[start:end])
-	col := (s.nextpos - start) - 1
-
-	return line_text, col
 }
 
 func (s *Scanner) match(char uint8) bool {
 	if s.isAtEnd() || s.peek(0) != char {
 		return false
 	}
-	s.nextpos++
+	s.pos().Col += 1
 	return true
 }
 
@@ -106,7 +90,7 @@ func (s *Scanner) skipWhiteSpace() {
 		case ' ', '\t', '\r':
 			s.next()
 		case '\n':
-			s.line++
+			s.pos().Line += 1
 			s.next()
 		default:
 			return
@@ -142,7 +126,7 @@ func (s *Scanner) skipcComment() {
 }
 func (s *Scanner) addToken(tt TokenType, literal any) {
 	text := ""
-	s.tokens = append(s.tokens, Token{token_type: tt, lexeme: text, literal: literal, line: s.line})
+	s.tokens = append(s.tokens, Token{token_type: tt, lexeme: text, literal: literal, line: s.pos().Line})
 }
 
 func (s *Scanner) scanString() {
@@ -154,12 +138,12 @@ func (s *Scanner) scanString() {
 		s.next()
 	}
 	if s.isAtEnd() {
-		s.createError("Unterminated string.")
+		s.createError(*s.file.Pos(), "Unterminated string.")
 		return
 	}
 	s.next()
 
-	value := string(s.source[s.start+1 : s.nextpos-1])
+	value := string(s.source[s.pos().Line+1 : s.pos().Col-1])
 	s.addToken(STRING, value)
 
 }
@@ -182,27 +166,21 @@ func (s *Scanner) scanNumber() {
 		}
 	}
 
-	data := s.source[s.start:s.nextpos]
+	data := s.source[s.pos().Start:s.pos().Col]
 	// TODO: Make add toke use slice of bytes from origin and convert the numbers on the tokenizer
 	val, err := strconv.ParseFloat(string(data), 64)
 
 	if err != nil {
-		s.createError("Failed to convert number.")
+		s.createError(*s.file.Pos(), "Failed to convert number.")
 	}
 
 	s.addToken(NUMBER, (val))
 }
 
-func (s *Scanner) createError(message string) {
-	line_txt, col := s.findErrorLine()
-	data := s.source[s.start:(s.nextpos - 1)]
-	s.SendInterpreterError(s.line, col, line_txt, string(data), message)
-}
-
 func (s *Scanner) scan() {
 begin:
 	s.skipWhiteSpace()
-	s.start = s.nextpos
+	s.pos().Start = s.pos().Col
 
 	s.next()
 	char := s.ch
@@ -261,7 +239,7 @@ begin:
 		if unicode.IsLetter(s.ch) || unicode.IsNumber(s.ch) {
 			s.indetifier()
 		} else {
-			s.createError("Unsupported Type.")
+			s.createError(*s.file.Pos(), "Unsupported Type.")
 		}
 	}
 }
@@ -276,7 +254,7 @@ func (s *Scanner) indetifier() {
 		}
 	}
 
-	text := string(s.source[s.start:s.nextpos])
+	text := string(s.source[s.pos().Start:s.pos().Col])
 
 	tokenType, ok := keywords[text]
 	if !ok {

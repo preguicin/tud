@@ -1,27 +1,23 @@
-// package ast
+package ast
 
-// import "tud/cmd/internal/lexer"
+import "tud/cmd/internal/interpreter/lexer"
 
-// type Expr interface {
-// 	Accept(visitor Visitor) any
-// }
+type Expr interface{}
 
-// type Binary struct {
-// 	Left     Expr
-// 	Operator lexer.Token
-// 	Right    Expr
-// }
+type Binary struct {
+	Left     Expr
+	Operator lexer.Token
+	Right    Expr
+}
+type Unary struct {
+	Right    Expr
+	Operator lexer.Token
+}
 
-// func (b *Binary) Accept(v Visitor) any { return v.VisitBinaryExpr(b) }
+type Literal struct {
+	Value any
+}
 
-// type Literal struct {
-// 	Value any
-// }
-
-// func (l *Literal) Accept(v Visitor) any { return v.VisitLiteralExpr(l) }
-
-// type Grouping struct {
-// 	Expression Expr
-// }
-
-// func (g *Grouping) Accept(v Visitor) any { return v.VisitGroupingExpr(g) }
+type Grouping struct {
+	Expression Expr
+}

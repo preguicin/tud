@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"tud/cmd/internal/file"
 	"tud/cmd/internal/interpreter"
 )
 
@@ -20,21 +21,28 @@ func main() {
 	if len(args) > 1 {
 		fmt.Println("Usage: tud [script]")
 	} else if len(args) == 1 {
-		bytes, err := os.ReadFile(args[0])
+		osfile, err := os.Open(args[0])
 
 		if err != nil {
 			fmt.Println(err.Error())
 			os.Exit(1)
 		}
 
-		i := interpreter.NewInterpreter()
-		i.Exec(bytes)
+		df, err := file.NewDiskFile(osfile)
+
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
+
+		i := interpreter.NewInterpreter(df)
+		i.Exec()
 
 	} else {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Println("Starting TUD session...")
 
-		i := interpreter.NewInterpreter()
+		// i := interpreter.NewInterpreter()
 		for {
 			fmt.Print("> ")
 			data, err := reader.ReadBytes('\n')
@@ -48,7 +56,7 @@ func main() {
 				break
 			}
 
-			i.ExecInteractive(data)
+			// i.ExecInteractive(data)
 		}
 	}
 }
