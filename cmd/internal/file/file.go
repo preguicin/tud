@@ -6,13 +6,14 @@ import (
 )
 
 type Position struct {
-	Line  int
-	Col   int
-	Start int
+	Line    int
+	LineCol int
+	Offset  int
+	Start   int
 }
 
 func NewPosition() Position {
-	return Position{Line: 1, Col: 0, Start: 0}
+	return Position{Line: 1, LineCol: 0, Offset: 0, Start: 0}
 }
 
 type File interface {
@@ -22,12 +23,12 @@ type File interface {
 }
 
 type InMemFile struct {
-	data []byte
+	data *[]byte
 	Position
 }
 
 func (inf *InMemFile) GetBytes() []byte {
-	return inf.data
+	return *inf.data
 }
 func (inf *InMemFile) Close() error {
 	inf.data = nil
@@ -36,7 +37,7 @@ func (inf *InMemFile) Close() error {
 
 func (inf *InMemFile) Pos() *Position { return &inf.Position }
 
-func NewInMemFile(data []byte) *InMemFile {
+func NewInMemFile(data *[]byte) *InMemFile {
 	return &InMemFile{data: data, Position: NewPosition()}
 }
 

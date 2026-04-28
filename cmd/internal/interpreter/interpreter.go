@@ -1,7 +1,6 @@
 package interpreter
 
 import (
-	"fmt"
 	"tud/cmd/internal/file"
 	"tud/cmd/internal/interpreter/error"
 	"tud/cmd/internal/interpreter/lexer"
@@ -17,7 +16,7 @@ func NewInterpreter(file file.File) Interpreter {
 	}
 }
 
-func (i *Interpreter) Exec() {
+func (i *Interpreter) Exec() ([]lexer.Token, []string) {
 	data := i.File.GetBytes()
 	errReporter := error.NewErrorReporter(data)
 
@@ -25,10 +24,8 @@ func (i *Interpreter) Exec() {
 	tokens := scanner.ScanTokens()
 
 	if errReporter.HasErrors() {
-
+		return nil, errReporter.GetErrorsText()
 	}
 
-	for i, t := range tokens {
-		fmt.Printf("Idx[%d]: %s\n", i, t)
-	}
+	return tokens, nil
 }

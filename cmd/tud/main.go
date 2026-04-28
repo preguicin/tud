@@ -42,7 +42,11 @@ func main() {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Println("Starting TUD session...")
 
-		// i := interpreter.NewInterpreter()
+		fileData := make([]byte, 0)
+
+		mf := file.NewInMemFile(&fileData)
+		i := interpreter.NewInterpreter(mf)
+
 		for {
 			fmt.Print("> ")
 			data, err := reader.ReadBytes('\n')
@@ -56,7 +60,20 @@ func main() {
 				break
 			}
 
-			// i.ExecInteractive(data)
+			fileData = append(fileData, data...)
+			tokens, reportErr := i.Exec()
+
+			if len(reportErr) > 0 {
+				for idx, t := range reportErr {
+					fmt.Printf("Err[%d]: %s\n", idx, t)
+				}
+				fileData = fileData[:len(fileData)-len(data)]
+				fmt.Println("Error detected: Last input discarded.")
+			} else {
+				for idx, t := range tokens {
+					fmt.Printf("Idx[%d]: %s\n", idx, t)
+				}
+			}
 		}
 	}
 }

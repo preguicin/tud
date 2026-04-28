@@ -33,31 +33,31 @@ func (s *Scanner) pos() *file.Position {
 }
 
 func (s *Scanner) isAtEnd() bool {
-	return s.pos().Col >= len(s.source)
+	return s.pos().Offset >= len(s.source)
 }
 
 // src: https://eli.thegreenplace.net/2022/a-faster-lexer-in-go/
 func (s *Scanner) next() {
-	if s.pos().Col < len(s.source) {
-		r, w := rune(s.source[s.pos().Col]), 1
+	if s.pos().Offset < len(s.source) {
+		r, w := rune(s.source[s.pos().Offset]), 1
 		if r >= utf8.RuneSelf {
-			r, w = utf8.DecodeRune(s.source[s.pos().Col:])
+			r, w = utf8.DecodeRune(s.source[s.pos().Offset:])
 			if r == utf8.RuneError || r == 0 {
 				s.createError(*s.file.Pos(), "Invalid UTF-8 charachter")
 				return
 			}
 		}
-		s.pos().Col += w
+		s.pos().Offset += w
 		s.ch = r
 	} else {
-		s.pos().Col = len(s.source)
+		s.pos().Offset = len(s.source)
 		s.ch = eof
 	}
 }
 
 func (s *Scanner) peek(idx int) uint8 {
 
-	nextChar := s.pos().Col + idx
+	nextChar := s.pos().Offset + idx
 	if nextChar < len(s.source) {
 		return s.source[nextChar]
 	}
@@ -69,7 +69,7 @@ func (s *Scanner) match(char uint8) bool {
 	if s.isAtEnd() || s.peek(0) != char {
 		return false
 	}
-	s.pos().Col += 1
+	s.pos().Offset += 1
 	return true
 }
 
@@ -126,7 +126,7 @@ func (s *Scanner) skipcComment() {
 }
 func (s *Scanner) addToken(tt TokenType, literal any) {
 	text := ""
-	s.tokens = append(s.tokens, Token{token_type: tt, lexeme: text, literal: literal, line: s.pos().Line})
+	s.tokens = append(s.tokens, Token{TokenType: tt, Lexeme: text, Literal: literal, Line: s.pos().Line})
 }
 
 func (s *Scanner) scanString() {
@@ -143,7 +143,7 @@ func (s *Scanner) scanString() {
 	}
 	s.next()
 
-	value := string(s.source[s.pos().Line+1 : s.pos().Col-1])
+	value := string(s.source[s.pos().Line+1 : s.pos().Offset-1])
 	s.addToken(STRING, value)
 
 }
@@ -166,7 +166,7 @@ func (s *Scanner) scanNumber() {
 		}
 	}
 
-	data := s.source[s.pos().Start:s.pos().Col]
+	data := s.source[s.pos().Start:s.pos().Offset]
 	// TODO: Make add toke use slice of bytes from origin and convert the numbers on the tokenizer
 	val, err := strconv.ParseFloat(string(data), 64)
 
@@ -180,7 +180,7 @@ func (s *Scanner) scanNumber() {
 func (s *Scanner) scan() {
 begin:
 	s.skipWhiteSpace()
-	s.pos().Start = s.pos().Col
+	s.pos().Start = s.pos().Offset
 
 	s.next()
 	char := s.ch
@@ -254,7 +254,7 @@ func (s *Scanner) indetifier() {
 		}
 	}
 
-	text := string(s.source[s.pos().Start:s.pos().Col])
+	text := string(s.source[s.pos().Start:s.pos().Offset])
 
 	tokenType, ok := keywords[text]
 	if !ok {

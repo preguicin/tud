@@ -9,7 +9,7 @@ import (
 
 func newTestScanner(src string) (*Scanner, *error.Reporter) {
 	data := []byte(src)
-	f := file.NewInMemFile(data)
+	f := file.NewInMemFile(&data)
 	errReporter := error.NewErrorReporter(data)
 
 	s := NewScanner(f, errReporter.NewError)
@@ -19,7 +19,7 @@ func newTestScanner(src string) (*Scanner, *error.Reporter) {
 func scannedTokenTypes(tokens []Token) []TokenType {
 	types := make([]TokenType, len(tokens))
 	for i, t := range tokens {
-		types[i] = t.token_type
+		types[i] = t.TokenType
 	}
 	return types
 }
@@ -47,7 +47,9 @@ func TestScanner(t *testing.T) {
 			tokens := s.ScanTokens()
 
 			if tt.expectError {
-				println(errRep.Errors[0].Message)
+				for _, t := range errRep.GetErrorsText() {
+					println(t)
+				}
 				if len(errRep.Errors) == 0 {
 					t.Errorf("expected error for %q, but got none", tt.src)
 				}
